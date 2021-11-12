@@ -1,1 +1,1 @@
-# AwsElasticBeanstalkTerminato
+# AwsElasticBeanstalkTerminator
