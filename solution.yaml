@@ -1,7 +1,6 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: This template will Terminate ElasticBeanstalk Environments daily at 9 PM.
+Description: This template will Terminate ElasticBeanstalk Environments daily.
 Resources:
-
   LambdaRoleForTerminatingElasticBeanstalk:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -15,6 +14,8 @@ Resources:
             Action:
               - 'sts:AssumeRole'
       RoleName: Stop-LambdaRole-DO-NOT-DELETE-FOR-ELASTICBEANSTALK
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AdministratorAccess-AWSElasticBeanstalk'
       Path: /
       Policies:
         - PolicyName: Stop-EB
@@ -24,14 +25,8 @@ Resources:
               - Effect: Allow
                 Action:
                   - 'ec2:DescribeRegions'
-                  - 'elasticbeanstalk:TerminateEnvironment'
-                  - 'rds:StopDBCluster'
                   - 'ec2:DescribeTags'
-                  - 'elasticbeanstalk:DescribeEnvironments'
-                  - 'elasticbeanstalk:DescribeEnvironmentResources'
                   - 'sts:GetCallerIdentity'
-                  - 'elasticbeanstalk:RetrieveEnvironmentInfo'
-                  - 'elasticbeanstalk:ListTagsForResource'
                 Resource: '*'
               - Effect: Allow
                 Action:
@@ -39,8 +34,7 @@ Resources:
                   - 'logs:CreateLogStream'
                   - 'logs:PutLogEvents'
                 Resource: '*'
- 
-  LmabdaForTerminatingEB:
+  LamabdaForTerminatingEB:
     Type: 'AWS::Lambda::Function'
     Properties:
       Description: This Function is used terminate the EB env
@@ -54,69 +48,68 @@ Resources:
           Value: 'no'
       Code:
         ZipFile: |
-            import boto3
-            def lambda_handler(event, context):
-              account_client = boto3.client('sts')
-              client = boto3.client('ec2')
+          import boto3
+          def lambda_handler(event, context):
+            account_client = boto3.client('sts')
+            client = boto3.client('ec2')
 
-              regions = [region['RegionName'] for region in client.describe_regions()['Regions']]
-              print(regions)
-              for region in regions:
-                
-                  client = boto3.client('elasticbeanstalk' , region_name= region)
-                  print("region is " +region)
-                  envs = client.describe_environments(
+            regions = [region['RegionName'] for region in client.describe_regions()['Regions']]
+            print(regions)
+            for region in regions:
+              
+                client = boto3.client('elasticbeanstalk' , region_name= region)
+                print("region is " +region)
+                envs = client.describe_environments(
 
-                      MaxRecords=123
-                      
-                  )
+                    MaxRecords=123
+                    
+                )
 
-                  envlist=[]
-                  print('terminating these environments-')
-                  try:
-                      for env in envs['Environments']:
-                          if env['Status']!='Terminated' and env['Status']!= 'Terminating':
-                              delete=True
-                              env_arn=env['EnvironmentArn']
-                              tags=client.list_tags_for_resource(ResourceArn=env_arn)['ResourceTags']
-                              for tag in tags:
-                                  if( tag['Key'] =='AutoDelete' and tag ['Value'] == 'false'):
-                                      delete=False
-                              print(env['EnvironmentName'])
-                              if(delete==True):
-                                print("will delelete this ")  
-                                envlist.append(env['EnvironmentName'])
-                          
-                      print(envlist)
-                      for env in envlist:
-                          try:
-                              response = client.terminate_environment(
-                              
-                              EnvironmentName=env,
-                              TerminateResources=True
-                              )
-                          except Exception as e:
-                            print(e)    
+                envlist=[]
+                print('terminating these environments-')
+                try:
+                    for env in envs['Environments']:
+                        if env['Status']!='Terminated' and env['Status']!= 'Terminating':
+                            delete=True
+                            env_arn=env['EnvironmentArn']
+                            tags=client.list_tags_for_resource(ResourceArn=env_arn)['ResourceTags']
+                            for tag in tags:
+                                if( tag['Key'] =='AutoDelete' and tag ['Value'] == 'false'):
+                                    delete=False
+                            print(env['EnvironmentName'])
+                            if(delete==True):
+                              print("will delelete this ")  
+                              envlist.append(env['EnvironmentName'])
+                        
+                    print(envlist)
+                    for env in envlist:
+                        try:
+                            response = client.terminate_environment(
+                            
+                            EnvironmentName=env,
+                            TerminateResources=True
+                            )
+                        except Exception as e:
+                          print(e)    
 
-                  except Exception as e:
-                      print(e)
+                except Exception as e:
+                    print(e)
   EBEventRule:
     Type: 'AWS::Events::Rule'
     Properties:
       Name: EB-Terminate-DO-NOT-DELETE
-      ScheduleExpression: cron(20 15 * * ? *)
+      ScheduleExpression: cron(30 13 * * ? *)
       State: ENABLED
       Targets:
         - Arn:
             'Fn::GetAtt':
-              - LmabdaForTerminatingEB
+              - LamabdaForTerminatingEB
               - Arn
           Id: Test
-
   Permission:
     Type: 'AWS::Lambda::Permission'
     Properties:
-      FunctionName: !Ref LmabdaForTerminatingEB
+      FunctionName: !Ref LamabdaForTerminatingEB
       Action: 'lambda:InvokeFunction'
       Principal: events.amazonaws.com
       SourceArn:
